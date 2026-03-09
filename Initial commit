@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVI Pro2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .map-container { height: 380px; width: 100%; border-radius: 1.5rem; }
+        .big-input { 
+            width: 100%; padding: 0.8rem 1rem; background-color: #f8fafc; 
+            border-radius: 0.75rem; font-weight: 500; border: 2px solid #f1f5f9; outline: none;
+        }
+        .big-input:focus { border-color: #3b82f6; background-color: #fff; }
+        .grid-box { transition: all 0.2s; border: 1px solid rgba(0,0,0,0.03); }
+        .grid-box:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .custom-checkbox { width: 1.1rem; height: 1.1rem; accent-color: #3b82f6; cursor: pointer; }
+    </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-900" x-data="cviApp()" x-init="init()">
+
+    <div class="flex h-screen overflow-hidden">
+        <aside class="w-64 bg-[#0f172a] text-white flex flex-col shrink-0 shadow-2xl">
+            <div class="p-6 flex items-center gap-3 border-b border-slate-800">
+                <div class="bg-blue-600 p-2 rounded-xl"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></div>
+                <span class="text-xl font-bold tracking-tight">CVI <span class="text-blue-400">Pro</span></span>
+            </div>
+            <nav class="flex-1 p-4 space-y-2 mt-4">
+                <button @click="view = 'dashboard'; $nextTick(() => { initCharts(); lucide.createIcons(); })" 
+                    :class="view === 'dashboard' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:bg-slate-800'" 
+                    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-left text-sm">
+                    <i data-lucide="pie-chart" class="w-4 h-4"></i> 控制面板
+                </button>
+                <button @click="view = 'records'; $nextTick(() => lucide.createIcons())" 
+                    :class="view === 'records' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:bg-slate-800'" 
+                    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-left text-sm">
+                    <i data-lucide="clipboard-list" class="w-4 h-4"></i> 拜访记录中心
+                </button>
+            </nav>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0">
+            <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-20 shrink-0">
+                <h2 class="text-lg font-black text-slate-800" x-text="view === 'dashboard' ? '数据仪表盘' : '拜访记录中心'"></h2>
+                <div class="flex items-center gap-4">
+                    <template x-if="view === 'records'">
+                        <button @click="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all">
+                            <i data-lucide="download" class="w-4 h-4"></i> 导出 Excel
+                            <span x-show="selectedVisits.length > 0" class="bg-white text-emerald-700 px-1.5 py-0.5 rounded text-[10px]" x-text="selectedVisits.length"></span>
+                        </button>
+                    </template>
+                    <button @click="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-all">
+                        <i data-lucide="plus" class="w-4 h-4"></i> 新增拜访
+                    </button>
+                </div>
+            </header>
+
+            <div class="p-6 flex-1 overflow-y-auto custom-scrollbar">
+                
+                <template x-if="view === 'dashboard'">
+                    <div class="space-y-6 animate-in fade-in duration-500">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div @click="showStatsModal = true" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-400 transition-all group">
+                                <p class="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">累计拜访记录</p>
+                                <div class="flex items-end justify-between">
+                                    <h3 class="text-3xl font-black text-slate-800" x-text="visits.length"></h3>
+                                    <span class="text-blue-500 text-[10px] font-bold pb-1 group-hover:underline">点击查看月度统计 →</span>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-blue-500">
+                                <p class="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">本月拜访数 (3月)</p>
+                                <h3 class="text-3xl font-black text-blue-600" x-text="getMonthlyCount()"></h3>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-orange-500">
+                                <p class="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">待办任务数</p>
+                                <h3 class="text-3xl font-black text-orange-600" x-text="getTodoItems().length"></h3>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            <div class="lg:col-span-5 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h4 class="text-slate-800 font-black flex items-center gap-2">
+                                        <i data-lucide="calendar-range" class="w-4 h-4 text-blue-500"></i> 3月拜访分布
+                                    </h4>
+                                    <span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">2026年3月限定</span>
+                                </div>
+                                <div class="grid grid-cols-7 gap-2">
+                                    <template x-for="day in daysInMonth" :key="day">
+                                        <div :class="getHeatmapColor(day)" @click="filterByExactDate(day)"
+                                             class="grid-box aspect-square rounded-lg flex items-center justify-center text-xs font-bold cursor-pointer" x-text="day">
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div class="lg:col-span-7 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
+                                <h4 class="text-slate-800 font-black mb-4 flex items-center gap-2">
+                                    <i data-lucide="list-todo" class="w-4 h-4 text-orange-500"></i> 待办事项跟踪
+                                </h4>
+                                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2" style="max-height: 240px;">
+                                    <template x-for="todo in getTodoItems()" :key="todo.id">
+                                        <div class="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors group">
+                                            <div class="mt-1"><i data-lucide="circle" class="w-3 h-3 text-slate-300"></i></div>
+                                            <div class="flex-1">
+                                                <p class="text-xs font-black text-slate-800" x-text="todo.company"></p>
+                                                <p class="text-[11px] text-orange-600 font-bold mt-1" x-text="todo.todoTask"></p>
+                                            </div>
+                                            <button @click="openDetail(todo)" class="opacity-0 group-hover:opacity-100 text-blue-500 text-[10px] font-bold">查看详情</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                            <h4 class="text-slate-800 font-black mb-4 flex items-center gap-2">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-blue-500"></i> 客户地理分布 (上海地区)
+                            </h4>
+                            <div id="mapChart" class="map-container bg-slate-50"></div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="view === 'records'">
+                    <div class="space-y-6">
+                        <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="flex items-center gap-4">
+                                <div class="relative">
+                                    <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-slate-400"></i>
+                                    <input type="text" x-model="searchQuery" placeholder="搜索公司、日期或内容..." class="w-80 pl-10 pr-4 py-2 bg-slate-50 rounded-xl text-sm font-medium outline-none border border-transparent focus:border-blue-400 transition-all">
+                                </div>
+                                
+                                <button @click="toggleSort()" class="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 transition-all border border-slate-100">
+                                    <i :data-lucide="sortOrder === 'desc' ? 'sort-desc' : 'sort-asc'" class="w-4 h-4 text-blue-500"></i>
+                                    <span x-text="sortOrder === 'desc' ? '最新在前' : '最早在前'"></span>
+                                </button>
+
+                                <div class="flex p-1 bg-slate-100 rounded-lg ml-2">
+                                    <button @click="recordMode = 'card'; $nextTick(() => lucide.createIcons())" :class="recordMode === 'card' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'" class="px-3 py-1.5 rounded-md text-xs font-black transition-all">卡片</button>
+                                    <button @click="recordMode = 'list'; $nextTick(() => lucide.createIcons())" :class="recordMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'" class="px-3 py-1.5 rounded-md text-xs font-black transition-all">列表</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <template x-if="recordMode === 'card'">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <template x-for="v in filteredVisits" :key="v.id">
+                                    <div :class="selectedVisits.map(String).includes(String(v.id)) ? 'border-blue-500 bg-blue-50/30' : 'border-slate-100'"
+                                         class="bg-white p-5 rounded-[2rem] border transition-all cursor-pointer hover:shadow-xl relative group" @click="openDetail(v)">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <input type="checkbox" :value="String(v.id)" x-model="selectedVisits" @click.stop class="custom-checkbox">
+                                            <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black" x-text="v.date"></span>
+                                        </div>
+                                        <h4 class="text-base font-black text-slate-800 mb-1 truncate" x-text="v.company"></h4>
+                                        <p class="text-[10px] text-blue-600 font-bold mb-3 inline-flex items-center gap-1" x-text="'🎯 ' + (v.purpose || '常规拜访')"></p>
+                                        <div class="text-[12px] text-slate-500 line-clamp-2 bg-slate-50 p-3 rounded-xl leading-relaxed mb-4" x-text="v.content"></div>
+                                        <div class="flex justify-end gap-2 border-t pt-3 border-slate-50">
+                                            <button @click.stop="editRecord(v)" class="p-2 bg-slate-50 text-blue-600 rounded-lg hover:bg-blue-100"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+                                            <button @click.stop="deleteRecord(v.id)" class="p-2 bg-slate-50 text-red-500 rounded-lg hover:bg-red-50"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template x-if="recordMode === 'list'">
+                            <div class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-50 text-slate-400 font-black uppercase border-b border-slate-100">
+                                        <tr>
+                                            <th class="px-6 py-4 w-10"><input type="checkbox" @click="toggleAllVisible()" class="custom-checkbox"></th>
+                                            <th class="px-6 py-4">日期</th>
+                                            <th class="px-6 py-4">客户公司</th>
+                                            <th class="px-6 py-4">内容简述</th>
+                                            <th class="px-6 py-4 text-right">操作管理</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-50 font-medium">
+                                        <template x-for="v in filteredVisits" :key="v.id">
+                                            <tr @click="openDetail(v)" :class="selectedVisits.map(String).includes(String(v.id)) ? 'bg-blue-50/50' : 'hover:bg-slate-50/50'" class="cursor-pointer transition-colors">
+                                                <td class="px-6 py-4" @click.stop><input type="checkbox" :value="String(v.id)" x-model="selectedVisits" class="custom-checkbox"></td>
+                                                <td class="px-6 py-4 text-blue-600 font-bold" x-text="v.date"></td>
+                                                <td class="px-6 py-4 font-black" x-text="v.company"></td>
+                                                <td class="px-6 py-4 text-slate-400 truncate max-w-xs" x-text="v.content"></td>
+                                                <td class="px-6 py-4 text-right" @click.stop>
+                                                    <div class="flex justify-end gap-3">
+                                                        <button @click="editRecord(v)" class="text-blue-500 font-black hover:underline">编辑</button>
+                                                        <button @click="deleteRecord(v.id)" class="text-red-400 font-black hover:underline">删除</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </main>
+    </div>
+
+    <div x-show="showStatsModal" x-cloak class="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div @click="showStatsModal = false" class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-[2rem] p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-xl font-black mb-6">月度拜访次数汇总</h3>
+            <div class="space-y-3">
+                <template x-for="item in getMonthlyBreakdown()" :key="item.month">
+                    <div class="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
+                        <span class="font-bold text-slate-700" x-text="item.month"></span>
+                        <span class="text-blue-600 font-black" x-text="item.count + ' 次'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showForm" x-cloak class="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div @click="showForm = false" class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+        <form @submit.prevent="save()" class="relative bg-white rounded-[2rem] p-8 w-full max-w-lg space-y-4 shadow-2xl">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl font-black text-slate-800" x-text="mode === 'create' ? '新增拜访记录' : '修改记录'"></h3>
+                <button type="button" @click="smartRecognize()" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-black hover:bg-blue-100 transition-colors">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 智能内容识别
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <input x-model="form.company" placeholder="客户公司名称 *" required class="big-input">
+                <input x-model="form.purpose" placeholder="拜访目的 (如：项目交付、需求深挖) *" required class="big-input">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="date" x-model="form.date" required class="big-input">
+                    <input x-model="form.address" placeholder="所属区域" class="big-input">
+                </div>
+                <textarea x-model="form.content" placeholder="记录核心沟通内容... *" required class="big-input h-32 resize-none"></textarea>
+                <input x-model="form.todoTask" placeholder="待办事项 (选填)" class="big-input">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-base shadow-lg hover:bg-blue-700 transition-all" x-text="mode === 'create' ? '保存记录' : '保存并更新'"></button>
+        </form>
+    </div>
+
+    <div x-show="showDetail" x-cloak class="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div @click="showDetail = false" class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl">
+            <div class="border-b border-slate-100 pb-4 mb-4">
+                <div class="flex justify-between items-start">
+                    <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-black" x-text="detailData.date"></span>
+                    <button @click="showDetail = false"><i data-lucide="x" class="w-5 h-5 text-slate-300"></i></button>
+                </div>
+                <h3 class="text-2xl font-black text-slate-800 mt-2" x-text="detailData.company"></h3>
+                <p class="text-blue-600 font-bold text-sm mt-1" x-text="'🎯 ' + (detailData.purpose || '常规拜访')"></p>
+            </div>
+            <div class="space-y-4">
+                <div class="bg-slate-50 p-5 rounded-2xl text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap" x-text="detailData.content"></div>
+                <template x-if="detailData.todoTask">
+                    <div class="p-4 bg-orange-50 border-l-4 border-orange-500 rounded-r-xl">
+                        <span class="text-[10px] font-black text-orange-600 uppercase">后续待办事项</span>
+                        <p class="text-orange-700 font-bold text-sm mt-1" x-text="detailData.todoTask"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function cviApp() {
+            return {
+                view: 'dashboard', recordMode: 'card', showForm: false, showDetail: false, showStatsModal: false,
+                mode: 'create', searchQuery: '', sortOrder: 'desc', // desc: 降序(最新在前), asc: 升序
+                currentYear: 2026, currentMonth: 3, 
+                visits: [], form: {}, detailData: {}, mapChart: null,
+                selectedVisits: [],
+
+                init() {
+                    const saved = localStorage.getItem('cvi_v2026_final');
+                    this.visits = saved ? JSON.parse(saved) : [
+                        { id: '1', company: '飞测智能科技', address: '浦东', date: '2026-03-03', purpose: '技术交流', content: '沟通了二期自动化方案。', lng: 121.58, lat: 31.20, todoTask: '周五发报价' }
+                    ];
+                    this.$nextTick(() => { 
+                        lucide.createIcons(); 
+                        setTimeout(() => this.initCharts(), 300); 
+                    });
+                },
+
+                // 切换排序逻辑
+                toggleSort() {
+                    this.sortOrder = this.sortOrder === 'desc' ? 'asc' : 'desc';
+                    this.$nextTick(() => lucide.createIcons());
+                },
+
+                // 智能内容识别
+                smartRecognize() {
+                    const rawText = prompt("请粘贴内容（包含公司、地址、目的、内容、待办）：\n例如：公司是飞测智能，地址在浦东，目的是签约...");
+                    if (!rawText || rawText.trim() === "") return;
+
+                    const extract = (keywords) => {
+                        for (let k of keywords) {
+                            const reg = new RegExp(`${k}[:是： ]\\s*([^，。,;；\n]+)`, 'i');
+                            const match = rawText.match(reg);
+                            if (match) return match[1].trim();
+                        }
+                        return null;
+                    };
+
+                    const foundCompany = extract(['公司', '客户']);
+                    const foundAddress = extract(['地址', '区域', '地点']);
+                    const foundPurpose = extract(['目的', '主题']);
+                    const foundTodo = extract(['待办', '任务', '后续']);
+                    const foundContent = extract(['内容', '记录', '详情']);
+
+                    if (foundCompany) this.form.company = foundCompany;
+                    if (foundAddress) this.form.address = foundAddress;
+                    if (foundPurpose) this.form.purpose = foundPurpose;
+                    if (foundTodo) this.form.todoTask = foundTodo;
+                    if (foundContent) this.form.content = foundContent;
+
+                    if (!foundCompany && !foundContent) {
+                        const lines = rawText.split(/[\n，。]/).filter(l => l.trim().length > 1);
+                        if (lines.length >= 1) this.form.company = lines[0].trim();
+                        if (lines.length >= 2) this.form.content = lines.slice(1).join('，').trim();
+                    }
+                    alert("内容已智能解析，请核对。");
+                },
+
+                get daysInMonth() { return new Date(2026, 3, 0).getDate(); },
+                getMonthlyCount() { return this.visits.filter(v => v.date.startsWith('2026-03')).length; },
+                getTodoItems() { return this.visits.filter(v => v.todoTask && v.todoTask.trim() !== ''); },
+                
+                getMonthlyBreakdown() {
+                    const counts = {};
+                    this.visits.forEach(v => {
+                        const m = v.date.substring(0, 7);
+                        counts[m] = (counts[m] || 0) + 1;
+                    });
+                    return Object.entries(counts).map(([month, count]) => ({ month, count })).sort((a,b) => b.month.localeCompare(a.month));
+                },
+
+                getHeatmapColor(day) {
+                    const d = `2026-03-${String(day).padStart(2, '0')}`;
+                    const count = this.visits.filter(v => v.date === d).length;
+                    if (count === 0) return 'bg-slate-100 text-slate-300';
+                    return count === 1 ? 'bg-blue-200 text-blue-800' : 'bg-blue-500 text-white shadow-md';
+                },
+
+                filterByExactDate(day) {
+                    this.searchQuery = `2026-03-${String(day).padStart(2, '0')}`;
+                    this.view = 'records';
+                },
+
+                initCharts() {
+                    const dom = document.getElementById('mapChart');
+                    if (!dom) return;
+                    if (this.mapChart) this.mapChart.dispose();
+                    this.mapChart = echarts.init(dom);
+                    fetch('https://geo.datav.aliyun.com/areas_v3/bound/310000_full.json').then(r => r.json()).then(geo => {
+                        echarts.registerMap('SH', geo);
+                        this.updateMap();
+                    });
+                },
+
+                updateMap() {
+                    if (!this.mapChart) return;
+                    const pts = this.visits.map(v => ({
+                        name: v.company, value: [v.lng || 121.47, v.lat || 31.23, v.purpose]
+                    }));
+                    this.mapChart.setOption({
+                        tooltip: { formatter: p => `${p.name}<br/>` },
+                        geo: { map: 'SH', roam: true, itemStyle: { areaColor: '#f1f5f9', borderColor: '#cbd5e1' } },
+                        series: [{ type: 'scatter', coordinateSystem: 'geo', data: pts, symbolSize: 10, itemStyle: { color: '#3b82f6' } }]
+                    });
+                },
+
+                // 【核心：搜索 + 排序 逻辑】
+                get filteredVisits() {
+                    const q = this.searchQuery.toLowerCase();
+                    let res = this.visits.filter(v => v.company.toLowerCase().includes(q) || v.date.includes(q) || v.content.includes(q));
+                    
+                    // 日期排序
+                    return res.sort((a, b) => {
+                        const dateA = new Date(a.date).getTime();
+                        const dateB = new Date(b.date).getTime();
+                        return this.sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+                    });
+                },
+
+                exportToExcel() {
+                    let targets = [];
+                    if (this.selectedVisits.length > 0) {
+                        const idSet = new Set(this.selectedVisits.map(String));
+                        targets = this.visits.filter(v => idSet.has(String(v.id)));
+                    } else {
+                        if (confirm('是否导出当前列表所有数据？')) { targets = this.filteredVisits; } else return;
+                    }
+                    if (targets.length === 0) return alert("无可导出数据");
+                    let csv = "\uFEFF日期,客户公司,目的,内容,待办\n";
+                    targets.forEach(v => {
+                        csv += `"${v.date}","${v.company}","${v.purpose}","${v.content.replace(/\n/g,' ')}","${v.todoTask}"\n`;
+                    });
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `拜访导出_${Date.now()}.csv`;
+                    a.click();
+                    this.selectedVisits = [];
+                },
+
+                openModal() {
+                    this.mode = 'create';
+                    this.form = { company: '', purpose: '', date: '2026-03-09', address: '', content: '', todoTask: '' };
+                    this.showForm = true;
+                },
+
+                editRecord(v) { this.mode = 'edit'; this.form = { ...v }; this.showForm = true; },
+
+                deleteRecord(id) {
+                    if (confirm('确定删除？')) {
+                        this.visits = this.visits.filter(v => String(v.id) !== String(id));
+                        this.saveData();
+                    }
+                },
+
+                save() {
+                    if (this.mode === 'create') {
+                        this.visits.unshift({ ...this.form, id: String(Date.now()), lng: 121.3+Math.random()*0.4, lat: 31.1+Math.random()*0.3 });
+                    } else {
+                        const idx = this.visits.findIndex(v => String(v.id) === String(this.form.id));
+                        this.visits[idx] = { ...this.form };
+                    }
+                    this.saveData();
+                    this.showForm = false;
+                },
+
+                saveData() { 
+                    localStorage.setItem('cvi_v2026_final', JSON.stringify(this.visits)); 
+                    if (this.view === 'dashboard') this.updateMap();
+                },
+
+                openDetail(v) { this.detailData = { ...v }; this.showDetail = true; this.$nextTick(() => lucide.createIcons()); }
+            }
+        }
+    </script>
+</body>
+</html>
