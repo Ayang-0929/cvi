@@ -12,6 +12,7 @@
         [x-cloak] { display: none !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        /* 移动端地图高度适当减小 */
         .map-container { height: 300px; width: 100%; border-radius: 1.5rem; }
         @media (min-width: 768px) { .map-container { height: 380px; } }
         .big-input { 
@@ -27,6 +28,7 @@
 <body class="bg-[#f8fafc] text-slate-900" x-data="cviApp()" x-init="init()">
 
     <div class="flex h-screen overflow-hidden flex-col md:flex-row">
+        
         <aside class="hidden md:flex w-64 bg-[#0f172a] text-white flex-col shrink-0 shadow-2xl z-30">
             <div class="p-6 flex items-center gap-3 border-b border-slate-800">
                 <div class="bg-blue-600 p-2 rounded-xl"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></div>
@@ -91,6 +93,7 @@
                                     <h4 class="text-slate-800 font-black flex items-center gap-2">
                                         <i data-lucide="calendar-range" class="w-4 h-4 text-blue-500"></i> 3月分布
                                     </h4>
+                                    <span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">2026年3月限定</span>
                                 </div>
                                 <div class="grid grid-cols-7 gap-1 md:gap-2">
                                     <template x-for="day in daysInMonth" :key="day">
@@ -137,11 +140,13 @@
                                     <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-slate-400"></i>
                                     <input type="text" x-model="searchQuery" placeholder="搜索公司、日期或内容..." class="w-full md:w-80 pl-10 pr-4 py-2 bg-slate-50 rounded-xl text-sm font-medium outline-none border border-transparent focus:border-blue-400 transition-all">
                                 </div>
+                                
                                 <div class="flex justify-between items-center gap-2">
                                     <button @click="toggleSort()" class="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 transition-all border border-slate-100">
                                         <i :data-lucide="sortOrder === 'desc' ? 'sort-desc' : 'sort-asc'" class="w-4 h-4 text-blue-500"></i>
                                         <span x-text="sortOrder === 'desc' ? '最新' : '最早'"></span>
                                     </button>
+
                                     <div class="flex p-1 bg-slate-100 rounded-lg">
                                         <button @click="recordMode = 'card'; $nextTick(() => lucide.createIcons())" :class="recordMode === 'card' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'" class="px-3 py-1.5 rounded-md text-xs font-black transition-all">卡片</button>
                                         <button @click="recordMode = 'list'; $nextTick(() => lucide.createIcons())" :class="recordMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'" class="px-3 py-1.5 rounded-md text-xs font-black transition-all">列表</button>
@@ -173,7 +178,7 @@
 
                         <template x-if="recordMode === 'list'">
                             <div class="bg-white rounded-2xl border border-slate-100 overflow-x-auto shadow-sm custom-scrollbar">
-                                <table class="w-full text-left text-xs">
+                                <table class="w-full text-left text-xs whitespace-nowrap md:whitespace-normal">
                                     <thead class="bg-slate-50 text-slate-400 font-black uppercase border-b border-slate-100">
                                         <tr>
                                             <th class="px-4 md:px-6 py-4 w-10"><input type="checkbox" @click="toggleAllVisible()" class="custom-checkbox"></th>
@@ -247,6 +252,7 @@
                     <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 智能内容识别
                 </button>
             </div>
+
             <div class="space-y-3">
                 <input x-model="form.company" placeholder="客户公司名称 *" required class="big-input">
                 <input x-model="form.purpose" placeholder="拜访目的 (如：项目交付) *" required class="big-input">
@@ -285,6 +291,7 @@
     </div>
 
     <script>
+        // JS 逻辑保持不变
         function cviApp() {
             return {
                 view: 'dashboard', recordMode: 'card', showForm: false, showDetail: false, showStatsModal: false,
@@ -293,53 +300,26 @@
                 visits: [], form: {}, detailData: {}, mapChart: null,
                 selectedVisits: [],
 
-                // 初始化逻辑：从本地硬盘读取数据
                 init() {
-                    const saved = localStorage.getItem('cvi_v2026_final_storage');
-                    if (saved) {
-                        // 如果有保存的，加载保存的
-                        this.visits = JSON.parse(saved);
-                    } else {
-                        // 第一次打开，没有数据，则显示默认演示数据
-                        this.visits = [
-                            { id: '1', company: '演示客户：飞测智能科技', address: '浦东', date: '2026-03-03', purpose: '技术交流', content: '这是一条演示记录。你可以尝试删除它并新增自己的记录。', lng: 121.58, lat: 31.20, todoTask: '周五发报价' }
-                        ];
-                    }
+                    const saved = localStorage.getItem('cvi_v2026_final');
+                    this.visits = saved ? JSON.parse(saved) : [
+                        { id: '1', company: '飞测智能科技', address: '浦东', date: '2026-03-03', purpose: '技术交流', content: '沟通了二期自动化方案。', lng: 121.58, lat: 31.20, todoTask: '周五发报价' }
+                    ];
                     this.$nextTick(() => { 
                         lucide.createIcons(); 
                         setTimeout(() => this.initCharts(), 300); 
                     });
                 },
 
-                // 【核心】保存数据到本地硬盘的方法
-                saveData() { 
-                    localStorage.setItem('cvi_v2026_final_storage', JSON.stringify(this.visits));
+                toggleSort() {
+                    this.sortOrder = this.sortOrder === 'desc' ? 'asc' : 'desc';
+                    this.$nextTick(() => lucide.createIcons());
                 },
 
-                save() {
-                    if (this.mode === 'create') {
-                        this.visits.unshift({ ...this.form, id: String(Date.now()), lng: 121.3+Math.random()*0.4, lat: 31.1+Math.random()*0.3 });
-                    } else {
-                        const idx = this.visits.findIndex(v => String(v.id) === String(this.form.id));
-                        this.visits[idx] = { ...this.form };
-                    }
-                    this.saveData(); // 保存到硬盘
-                    this.showForm = false;
-                    this.updateMap(); // 更新地图点位
-                },
-
-                deleteRecord(id) {
-                    if (confirm('确定永久删除这条拜访记录吗？')) {
-                        this.visits = this.visits.filter(v => String(v.id) !== String(id));
-                        this.saveData(); // 保存到硬盘
-                        this.updateMap();
-                    }
-                },
-
-                // 智能识别逻辑
                 smartRecognize() {
-                    const rawText = prompt("请粘贴内容（包含公司、目的、内容、待办）：\n例如：公司是飞测智能，目的是签约...");
+                    const rawText = prompt("请粘贴内容（包含公司、地址、目的、内容、待办）：\n例如：公司是飞测智能，地址在浦东，目的是签约...");
                     if (!rawText || rawText.trim() === "") return;
+
                     const extract = (keywords) => {
                         for (let k of keywords) {
                             const reg = new RegExp(`${k}[:是： ]\\s*([^，。,;；\n]+)`, 'i');
@@ -348,21 +328,31 @@
                         }
                         return null;
                     };
+
                     const foundCompany = extract(['公司', '客户']);
+                    const foundAddress = extract(['地址', '区域', '地点']);
                     const foundPurpose = extract(['目的', '主题']);
                     const foundTodo = extract(['待办', '任务', '后续']);
                     const foundContent = extract(['内容', '记录', '详情']);
+
                     if (foundCompany) this.form.company = foundCompany;
+                    if (foundAddress) this.form.address = foundAddress;
                     if (foundPurpose) this.form.purpose = foundPurpose;
                     if (foundTodo) this.form.todoTask = foundTodo;
                     if (foundContent) this.form.content = foundContent;
+
+                    if (!foundCompany && !foundContent) {
+                        const lines = rawText.split(/[\n，。]/).filter(l => l.trim().length > 1);
+                        if (lines.length >= 1) this.form.company = lines[0].trim();
+                        if (lines.length >= 2) this.form.content = lines.slice(1).join('，').trim();
+                    }
                     alert("内容已智能解析，请核对。");
                 },
 
-                // 以下为辅助计算与界面逻辑
                 get daysInMonth() { return new Date(2026, 3, 0).getDate(); },
                 getMonthlyCount() { return this.visits.filter(v => v.date.startsWith('2026-03')).length; },
                 getTodoItems() { return this.visits.filter(v => v.todoTask && v.todoTask.trim() !== ''); },
+                
                 getMonthlyBreakdown() {
                     const counts = {};
                     this.visits.forEach(v => {
@@ -371,16 +361,19 @@
                     });
                     return Object.entries(counts).map(([month, count]) => ({ month, count })).sort((a,b) => b.month.localeCompare(a.month));
                 },
+
                 getHeatmapColor(day) {
                     const d = `2026-03-${String(day).padStart(2, '0')}`;
                     const count = this.visits.filter(v => v.date === d).length;
                     if (count === 0) return 'bg-slate-100 text-slate-300';
                     return count === 1 ? 'bg-blue-200 text-blue-800' : 'bg-blue-500 text-white shadow-md';
                 },
+
                 filterByExactDate(day) {
                     this.searchQuery = `2026-03-${String(day).padStart(2, '0')}`;
                     this.view = 'records';
                 },
+
                 initCharts() {
                     const dom = document.getElementById('mapChart');
                     if (!dom) return;
@@ -390,54 +383,99 @@
                         echarts.registerMap('SH', geo);
                         this.updateMap();
                     });
-                    window.addEventListener('resize', () => this.mapChart && this.mapChart.resize());
+                    // 监听窗口大小变化以重绘地图
+                    window.addEventListener('resize', () => {
+                        if (this.mapChart) this.mapChart.resize();
+                    });
                 },
+
                 updateMap() {
                     if (!this.mapChart) return;
                     const pts = this.visits.map(v => ({
                         name: v.company, value: [v.lng || 121.47, v.lat || 31.23, v.purpose]
                     }));
                     this.mapChart.setOption({
-                        tooltip: { formatter: p => `${p.name}` },
+                        tooltip: { formatter: p => `${p.name}<br/>` },
                         geo: { map: 'SH', roam: true, itemStyle: { areaColor: '#f1f5f9', borderColor: '#cbd5e1' } },
                         series: [{ type: 'scatter', coordinateSystem: 'geo', data: pts, symbolSize: 10, itemStyle: { color: '#3b82f6' } }]
                     });
                 },
+
                 get filteredVisits() {
                     const q = this.searchQuery.toLowerCase();
                     let res = this.visits.filter(v => v.company.toLowerCase().includes(q) || v.date.includes(q) || v.content.includes(q));
+                    
                     return res.sort((a, b) => {
                         const dateA = new Date(a.date).getTime();
                         const dateB = new Date(b.date).getTime();
                         return this.sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
                     });
                 },
-                toggleSort() { this.sortOrder = this.sortOrder === 'desc' ? 'asc' : 'desc'; this.$nextTick(() => lucide.createIcons()); },
+
                 toggleAllVisible() {
                     const allIds = this.filteredVisits.map(v => String(v.id));
                     const currentlySelected = allIds.every(id => this.selectedVisits.includes(id));
-                    if (currentlySelected) { this.selectedVisits = this.selectedVisits.filter(id => !allIds.includes(id)); } 
-                    else { this.selectedVisits = Array.from(new Set([...this.selectedVisits, ...allIds])); }
+                    if (currentlySelected) {
+                        this.selectedVisits = this.selectedVisits.filter(id => !allIds.includes(id));
+                    } else {
+                        const newSelection = new Set([...this.selectedVisits, ...allIds]);
+                        this.selectedVisits = Array.from(newSelection);
+                    }
                 },
-                openModal() {
-                    this.mode = 'create';
-                    this.form = { company: '', purpose: '', date: '2026-03-11', address: '', content: '', todoTask: '' };
-                    this.showForm = true;
-                    this.$nextTick(() => lucide.createIcons());
-                },
-                openDetail(v) { this.detailData = v; this.showDetail = true; this.$nextTick(() => lucide.createIcons()); },
-                editRecord(v) { this.mode = 'edit'; this.form = { ...v }; this.showForm = true; this.$nextTick(() => lucide.createIcons()); },
+
                 exportToExcel() {
-                    let targets = this.selectedVisits.length > 0 ? this.visits.filter(v => this.selectedVisits.includes(String(v.id))) : this.filteredVisits;
-                    if (targets.length === 0) return alert("没有可导出的数据");
+                    let targets = [];
+                    if (this.selectedVisits.length > 0) {
+                        const idSet = new Set(this.selectedVisits.map(String));
+                        targets = this.visits.filter(v => idSet.has(String(v.id)));
+                    } else {
+                        if (confirm('是否导出当前列表所有数据？')) { targets = this.filteredVisits; } else return;
+                    }
+                    if (targets.length === 0) return alert("无可导出数据");
                     let csv = "\uFEFF日期,客户公司,目的,内容,待办\n";
-                    targets.forEach(v => { csv += `"${v.date}","${v.company}","${v.purpose}","${v.content.replace(/\n/g,' ')}","${v.todoTask}"\n`; });
+                    targets.forEach(v => {
+                        csv += `"${v.date}","${v.company}","${v.purpose}","${v.content.replace(/\n/g,' ')}","${v.todoTask}"\n`;
+                    });
                     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const a = document.createElement("a");
                     a.href = URL.createObjectURL(blob);
-                    a.download = `CVI拜访导出_${Date.now()}.csv`;
+                    a.download = `拜访导出_${Date.now()}.csv`;
                     a.click();
-                }
+                    this.selectedVisits = [];
+                },
+
+                openModal() {
+                    this.mode = 'create';
+                    this.form = { company: '', purpose: '', date: '2026-03-09', address: '', content: '', todoTask: '' };
+                    this.showForm = true;
+                },
+
+                editRecord(v) { this.mode = 'edit'; this.form = { ...v }; this.showForm = true; },
+
+                deleteRecord(id) {
+                    if (confirm('确定删除？')) {
+                        this.visits = this.visits.filter(v => String(v.id) !== String(id));
+                        this.saveData();
+                    }
+                },
+
+                save() {
+                    if (this.mode === 'create') {
+                        this.visits.unshift({ ...this.form, id: String(Date.now()), lng: 121.3+Math.random()*0.4, lat: 31.1+Math.random()*0.3 });
+                    } else {
+                        const idx = this.visits.findIndex(v => String(v.id) === String(this.form.id));
+                        this.visits[idx] = { ...this.form };
+                    }
+                    this.saveData();
+                    this.showForm = false;
+                },
+
+                saveData() { 
+                    localStorage.setItem('cvi_v2026_final', JSON.stringify(this.visits)); 
+                    if (this.view === 'dashboard') this.updateMap();
+                },
+
+                openDetail(v) { this.detailData = { ...v }; this.showDetail = true; this.$nextTick(() => lucide.createIcons()); }
             }
         }
     </script>
